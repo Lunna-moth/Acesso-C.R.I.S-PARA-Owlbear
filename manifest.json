@@ -1,10 +1,10 @@
 {
-  "name": "CRIS Acesso",
+  "name": "Acesso CRIS",
   "version": "1.0.0",
   "manifest_version": 1,
   "action": {
     "title": "CRIS",
     "icon": "icon.png",
-    "popup": "index.html"
+    "popover": "index.html"
   }
 }

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Acesso CrisOP</title>
+  </head>
+  <body style="font-family: sans-serif; padding: 20px; background: #111; color: white;">
+    <h2>Site da Cris OP</h2>
+    <p>Clique no botão abaixo para abrir:</p>
+
+    <button id="open" style="
+      padding: 12px 20px;
+      background: #e63946;
+      border: none;
+      color: white;
+      cursor: pointer;
+      font-size: 16px;
+      border-radius: 6px;
+    ">Abrir site</button>
+
+    <script>
+      document.getElementById("open").onclick = () => {
+        window.open("https://crisordemparanormal.com/", "_blank");
+      };
+    </script>
+  </body>
+</html>

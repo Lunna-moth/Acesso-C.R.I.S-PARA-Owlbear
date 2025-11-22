@@ -1,0 +1,12 @@
+{
+  "name": "Acesso Cris OP",
+  "version": "1.0.0",
+  "manifest_version": 1,
+  "action": {
+    "title": "Cris OP",
+    "icon": "/icon.svg",
+    "popover": "/index.html",
+    "height": 600,
+    "width": 500
+  }
+}

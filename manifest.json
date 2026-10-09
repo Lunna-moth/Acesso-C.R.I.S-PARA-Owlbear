@@ -5,6 +5,7 @@
   "description": "Vincule imagens a tokens e visualize-as ao clicar.",
   "action": {
     "title": "🖼️ Gerenciar Imagens",
+    "icon": "icon.svg",
     "popover": "manage.html",
     "height": 450,
     "width": 350

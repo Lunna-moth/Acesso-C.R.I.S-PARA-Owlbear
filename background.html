@@ -17,15 +17,12 @@
       let lastOpenedTokenId = null;
 
       OBR.player.onChange(async (player) => {
-        // Só reage se houver exatamente um item selecionado
         if (!player.selection || player.selection.length !== 1) {
           lastOpenedTokenId = null;
           return;
         }
 
         const itemId = player.selection[0];
-
-        // Evita abrir o mesmo modal repetidamente se a seleção não mudou
         if (itemId === lastOpenedTokenId) return;
 
         const items = await OBR.scene.items.getItems([itemId]);
@@ -36,10 +33,9 @@
 
         if (imageUrl) {
           lastOpenedTokenId = itemId;
-          // Abre o modal com a imagem
           OBR.modal.open({
             id: MODAL_ID,
-            url: `modal.html?url=${encodeURIComponent(imageUrl)}`,
+            url: `/modal.html?url=${encodeURIComponent(imageUrl)}`,
             width: 600,
             height: 400,
             fullScreen: false,

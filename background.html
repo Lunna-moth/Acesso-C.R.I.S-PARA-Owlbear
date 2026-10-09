@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Background</title>
+</head>
+<body>
+  <script type="module">
+    import OBR from 'https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3.1.0/+esm';
+
+    const METADATA_KEY = 'com.example.image-link/imageUrl';
+    const MODAL_ID = 'com.example.image-link/modal';
+
+    OBR.onReady(async () => {
+      if (!OBR.isAvailable) return;
+
+      let lastOpenedTokenId = null;
+
+      OBR.player.onChange(async (player) => {
+        // Só reage se houver exatamente um item selecionado
+        if (!player.selection || player.selection.length !== 1) {
+          lastOpenedTokenId = null;
+          return;
+        }
+
+        const itemId = player.selection[0];
+
+        // Evita abrir o mesmo modal repetidamente se a seleção não mudou
+        if (itemId === lastOpenedTokenId) return;
+
+        const items = await OBR.scene.items.getItems([itemId]);
+        if (items.length === 0) return;
+
+        const item = items[0];
+        const imageUrl = item.metadata[METADATA_KEY];
+
+        if (imageUrl) {
+          lastOpenedTokenId = itemId;
+          // Abre o modal com a imagem
+          OBR.modal.open({
+            id: MODAL_ID,
+            url: `modal.html?url=${encodeURIComponent(imageUrl)}`,
+            width: 600,
+            height: 400,
+            fullScreen: false,
+            hideBackdrop: false
+          });
+        }
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,16 +1,13 @@
 {
-  "manifest_version": 1,
-  "name": "Acesso CRIS",
+  "name": "Vinculador de Imagens a Tokens",
   "version": "1.0.0",
-  "author": "Felipe",
-  "description": "Acesso rápido ao CRIS dentro do Owlbear Rodeo.",
+  "manifest_version": 1,
+  "description": "Vincule imagens a tokens e visualize-as ao clicar.",
   "action": {
-    "title": "CRIS",
-    "icon": "icon.png",
-    "popover": {
-      "url": "index.html",
-      "width": 800,
-      "height": 600
-    }
-  }
+    "title": "🖼️ Gerenciar Imagens",
+    "popover": "manage.html",
+    "height": 450,
+    "width": 350
+  },
+  "background_url": "background.html"
 }

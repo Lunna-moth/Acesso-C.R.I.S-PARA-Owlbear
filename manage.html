@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gerenciar Vínculos de Imagens</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      padding: 16px;
+      background: var(--obr-background, #1e1e2e);
+      color: var(--obr-text, #cdd6f4);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    h3 {
+      margin: 0 0 8px 0;
+      font-size: 16px;
+    }
+    .token-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 380px;
+      overflow-y: auto;
+    }
+    .token-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #313244;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid #45475a;
+      gap: 8px;
+    }
+    .token-name {
+      font-weight: 600;
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .status {
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .linked { color: #a6e3a1; }
+    .unlinked { color: #f38ba8; }
+    button {
+      padding: 6px 12px;
+      background: #89b4fa;
+      color: #1e1e2e;
+      border: none;
+      border-radius: 6px;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    button:hover { background: #74c7ec; }
+    button.remove { background: #f38ba8; color: white; }
+    button.remove:hover { background: #e64553; }
+  </style>
+</head>
+<body>
+  <h3>Tokens na Cena</h3>
+  <div id="token-list" class="token-list">Carregando...</div>
+
+  <script type="module">
+    import OBR from 'https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3.1.0/+esm';
+
+    const METADATA_KEY = 'com.example.image-link/imageUrl';
+
+    async function init() {
+      if (!OBR.isAvailable) return;
+
+      const tokenList = document.getElementById('token-list');
+
+      async function renderTokens() {
+        const items = await OBR.scene.items.getItems();
+        // Filtra itens que são tokens (camada CHARACTER e que possuem imagem)
+        const tokens = items.filter(item => item.layer === 'CHARACTER' && item.image);
+        tokenList.innerHTML = '';
+
+        if (tokens.length === 0) {
+          tokenList.textContent = 'Nenhum token encontrado na cena.';
+          return;
+        }
+
+        for (const token of tokens) {
+          const imageUrl = token.metadata[METADATA_KEY];
+          const div = document.createElement('div');
+          div.className = 'token-item';
+
+          const nameSpan = document.createElement('span');
+          nameSpan.className = 'token-name';
+          nameSpan.textContent = token.name || token.text?.plainText || 'Token sem nome';
+
+          const statusSpan = document.createElement('span');
+          statusSpan.className = 'status ' + (imageUrl ? 'linked' : 'unlinked');
+          statusSpan.textContent = imageUrl ? '✅' : '❌';
+
+          const actionBtn = document.createElement('button');
+          if (imageUrl) {
+            actionBtn.textContent = 'Remover';
+            actionBtn.className = 'remove';
+            actionBtn.onclick = async () => {
+              await OBR.scene.items.updateItems([token.id], (items) => {
+                for (const item of items) {
+                  delete item.metadata[METADATA_KEY];
+                }
+              });
+              await renderTokens();
+            };
+          } else {
+            actionBtn.textContent = 'Vincular';
+            actionBtn.onclick = async () => {
+              const input = document.createElement('input');
+              input.type = 'file';
+              input.accept = 'image/*';
+              input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const data = await file.arrayBuffer();
+                const newFile = new File([data], file.name, { type: file.type });
+                const upload = OBR.assets.buildImageUpload(newFile).build();
+                const [asset] = await OBR.assets.uploadImages([upload]);
+                if (asset && asset.url) {
+                  await OBR.scene.items.updateItems([token.id], (items) => {
+                    for (const item of items) {
+                      item.metadata[METADATA_KEY] = asset.url;
+                    }
+                  });
+                  await renderTokens();
+                }
+              };
+              input.click();
+            };
+          }
+
+          div.appendChild(nameSpan);
+          div.appendChild(statusSpan);
+          div.appendChild(actionBtn);
+          tokenList.appendChild(div);
+        }
+      }
+
+      // Re-renderiza quando a cena muda (ex: novos tokens)
+      OBR.scene.items.onChange(() => renderTokens());
+      await renderTokens();
+    }
+
+    OBR.onReady(init);
+  </script>
+</body>
+</html>

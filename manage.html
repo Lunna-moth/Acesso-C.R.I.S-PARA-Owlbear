@@ -13,58 +13,90 @@
       display: flex;
       flex-direction: column;
       gap: 12px;
+      box-sizing: border-box;
     }
-    h3 {
-      margin: 0 0 8px 0;
-      font-size: 16px;
+    h3 { margin: 0; font-size: 15px; }
+    .hint {
+      font-size: 12px;
+      color: #a6adc8;
+      background: #313244;
+      padding: 8px;
+      border-radius: 6px;
+      border-left: 3px solid #89b4fa;
+      line-height: 1.4;
     }
     .token-list {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 10px;
       max-height: 380px;
       overflow-y: auto;
     }
     .token-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
       background: #313244;
-      padding: 8px 12px;
+      padding: 10px;
       border-radius: 8px;
       border: 1px solid #45475a;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .token-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       gap: 8px;
     }
     .token-name {
       font-weight: 600;
+      font-size: 14px;
       flex: 1;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .status {
-      font-size: 12px;
-      white-space: nowrap;
-    }
+    .status { font-size: 12px; }
     .linked { color: #a6e3a1; }
     .unlinked { color: #f38ba8; }
-    button {
-      padding: 6px 12px;
+    select, button {
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid #45475a;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      font-size: 13px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    select { width: 100%; }
+    button.link {
       background: #89b4fa;
       color: #1e1e2e;
       border: none;
-      border-radius: 6px;
       font-weight: bold;
-      cursor: pointer;
-      font-size: 13px;
-      white-space: nowrap;
     }
-    button:hover { background: #74c7ec; }
-    button.remove { background: #f38ba8; color: white; }
+    button.link:hover { background: #74c7ec; }
+    button.remove {
+      background: #f38ba8;
+      color: white;
+      border: none;
+      font-weight: bold;
+    }
     button.remove:hover { background: #e64553; }
+    .empty {
+      text-align: center;
+      padding: 20px;
+      color: #6c7086;
+      font-size: 13px;
+    }
   </style>
 </head>
 <body>
+
+  <div class="hint">
+    💡 <b>Dica:</b> Para vincular uma imagem, primeiro arraste-a para o mapa como <b>Prop</b>. Depois escolha ela no menu abaixo.
+  </div>
+
   <h3>Tokens na Cena</h3>
   <div id="token-list" class="token-list">Carregando...</div>
 
@@ -78,78 +110,110 @@
 
       const tokenList = document.getElementById('token-list');
 
-      async function renderTokens() {
+      async function render() {
         const items = await OBR.scene.items.getItems();
-        // Filtra itens que são tokens (camada CHARACTER e que possuem imagem)
-        const tokens = items.filter(item => item.layer === 'CHARACTER' && item.image);
+        
+        // Tokens: camada CHARACTER (onde normalmente ficam os personagens)
+        const tokens = items.filter(item => item.layer === 'CHARACTER');
+        
+        // Imagens disponíveis: qualquer item com uma propriedade "image" que NÃO seja um token
+        const availableImages = items.filter(item => 
+          item.image && item.layer !== 'CHARACTER'
+        );
+
         tokenList.innerHTML = '';
 
         if (tokens.length === 0) {
-          tokenList.textContent = 'Nenhum token encontrado na cena.';
+          tokenList.innerHTML = '<div class="empty">Nenhum token na cena.<br>Adicione tokens na camada "Characters".</div>';
+          return;
+        }
+
+        if (availableImages.length === 0) {
+          tokenList.innerHTML = '<div class="empty">Nenhuma imagem na cena.<br>Arraste uma imagem para o mapa como "Prop" primeiro.</div>';
           return;
         }
 
         for (const token of tokens) {
-          const imageUrl = token.metadata[METADATA_KEY];
+          const currentUrl = token.metadata[METADATA_KEY];
+          const tokenName = token.name || 'Token sem nome';
+
           const div = document.createElement('div');
           div.className = 'token-item';
 
+          const header = document.createElement('div');
+          header.className = 'token-header';
+
           const nameSpan = document.createElement('span');
           nameSpan.className = 'token-name';
-          nameSpan.textContent = token.name || token.text?.plainText || 'Token sem nome';
+          nameSpan.textContent = tokenName;
 
           const statusSpan = document.createElement('span');
-          statusSpan.className = 'status ' + (imageUrl ? 'linked' : 'unlinked');
-          statusSpan.textContent = imageUrl ? '✅' : '❌';
+          statusSpan.className = 'status ' + (currentUrl ? 'linked' : 'unlinked');
+          statusSpan.textContent = currentUrl ? '✅ Vinculado' : '❌ Sem vínculo';
 
-          const actionBtn = document.createElement('button');
-          if (imageUrl) {
-            actionBtn.textContent = 'Remover';
-            actionBtn.className = 'remove';
-            actionBtn.onclick = async () => {
+          header.appendChild(nameSpan);
+          header.appendChild(statusSpan);
+
+          // Se já está vinculado: botão de remover
+          if (currentUrl) {
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'remove';
+            removeBtn.textContent = 'Remover vínculo';
+            removeBtn.onclick = async () => {
               await OBR.scene.items.updateItems([token.id], (items) => {
                 for (const item of items) {
                   delete item.metadata[METADATA_KEY];
                 }
               });
-              await renderTokens();
+              await render();
             };
+            div.appendChild(header);
+            div.appendChild(removeBtn);
           } else {
-            actionBtn.textContent = 'Vincular';
-            actionBtn.onclick = async () => {
-              const input = document.createElement('input');
-              input.type = 'file';
-              input.accept = 'image/*';
-              input.onchange = async (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                const data = await file.arrayBuffer();
-                const newFile = new File([data], file.name, { type: file.type });
-                const upload = OBR.assets.buildImageUpload(newFile).build();
-                const [asset] = await OBR.assets.uploadImages([upload]);
-                if (asset && asset.url) {
-                  await OBR.scene.items.updateItems([token.id], (items) => {
-                    for (const item of items) {
-                      item.metadata[METADATA_KEY] = asset.url;
-                    }
-                  });
-                  await renderTokens();
+            // Se não está vinculado: dropdown + botão vincular
+            const select = document.createElement('select');
+            select.innerHTML = '<option value="">-- Escolha uma imagem --</option>';
+            
+            for (const img of availableImages) {
+              const opt = document.createElement('option');
+              opt.value = img.image.url;
+              opt.textContent = img.name || `Imagem (${img.id.slice(0, 6)})`;
+              select.appendChild(opt);
+            }
+
+            const linkBtn = document.createElement('button');
+            linkBtn.className = 'link';
+            linkBtn.textContent = 'Vincular imagem selecionada';
+            linkBtn.onclick = async () => {
+              const url = select.value;
+              if (!url) {
+                alert('Escolha uma imagem primeiro!');
+                return;
+              }
+              await OBR.scene.items.updateItems([token.id], (items) => {
+                for (const item of items) {
+                  item.metadata[METADATA_KEY] = url;
                 }
-              };
-              input.click();
+              });
+              await render();
             };
+
+            div.appendChild(header);
+            div.appendChild(select);
+            div.appendChild(linkBtn);
           }
 
-          div.appendChild(nameSpan);
-          div.appendChild(statusSpan);
-          div.appendChild(actionBtn);
           tokenList.appendChild(div);
         }
       }
 
-      // Re-renderiza quando a cena muda (ex: novos tokens)
-      OBR.scene.items.onChange(() => renderTokens());
-      await renderTokens();
+      // Atualiza a UI quando a cena muda (novos tokens, novas imagens, etc.)
+      OBR.scene.items.onChange(() => render());
+      OBR.scene.onReadyChange(async (ready) => {
+        if (ready) await render();
+      });
+
+      await render();
     }
 
     OBR.onReady(init);

@@ -162,9 +162,10 @@
 
     // Converte o link "normal" do Drive para um link direto de imagem
     function driveUrlToDirect(url) {
-      const id = extractGoogleDriveId(url);
-      if (!id) return null;
-      return `https://lh3.googleusercontent.com/d/${id}`;
+    const id = extractGoogleDriveId(url);
+    if (!id) return null;
+    // Endpoint mais recente do Google, geralmente preserva transparência
+    return `https://drive.usercontent.google.com/download?id=${id}&export=view`;
     }
 
     async function init() {

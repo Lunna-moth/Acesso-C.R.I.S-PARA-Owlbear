@@ -7,13 +7,14 @@
   <style>
     body {
       font-family: system-ui, sans-serif;
-      padding: 16px;
+      padding: 12px;
       background: var(--obr-background, #1e1e2e);
       color: var(--obr-text, #cdd6f4);
       display: flex;
       flex-direction: column;
       gap: 12px;
       box-sizing: border-box;
+      margin: 0;
     }
     h3 { margin: 0; font-size: 15px; }
     .hint {
@@ -23,13 +24,14 @@
       padding: 8px;
       border-radius: 6px;
       border-left: 3px solid #89b4fa;
-      line-height: 1.4;
+      line-height: 1.5;
     }
+    .hint b { color: #cdd6f4; }
     .token-list {
       display: flex;
       flex-direction: column;
       gap: 10px;
-      max-height: 380px;
+      max-height: 500px;
       overflow-y: auto;
     }
     .token-item {
@@ -55,46 +57,80 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .status { font-size: 12px; }
+    .status { font-size: 12px; white-space: nowrap; }
     .linked { color: #a6e3a1; }
     .unlinked { color: #f38ba8; }
-    select, button {
+    select, button, input[type="text"] {
       padding: 6px 10px;
       border-radius: 6px;
       border: 1px solid #45475a;
       background: #1e1e2e;
       color: #cdd6f4;
       font-size: 13px;
-      cursor: pointer;
       font-family: inherit;
+      box-sizing: border-box;
     }
-    select { width: 100%; }
+    input[type="text"] { width: 100%; font-size: 12px; }
+    input[type="text"]::placeholder { color: #6c7086; }
+    select { width: 100%; cursor: pointer; }
+    button { cursor: pointer; font-weight: bold; }
     button.link {
       background: #89b4fa;
       color: #1e1e2e;
       border: none;
-      font-weight: bold;
     }
     button.link:hover { background: #74c7ec; }
+    button.drive {
+      background: #a6e3a1;
+      color: #1e1e2e;
+      border: none;
+    }
+    button.drive:hover { background: #94e2d5; }
     button.remove {
       background: #f38ba8;
       color: white;
       border: none;
-      font-weight: bold;
     }
     button.remove:hover { background: #e64553; }
+    .separator {
+      text-align: center;
+      font-size: 11px;
+      color: #6c7086;
+      margin: 2px 0;
+      position: relative;
+    }
+    .separator::before, .separator::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      width: 40%;
+      height: 1px;
+      background: #45475a;
+    }
+    .separator::before { left: 0; }
+    .separator::after { right: 0; }
     .empty {
       text-align: center;
       padding: 20px;
       color: #6c7086;
       font-size: 13px;
     }
+    .current-link {
+      font-size: 11px;
+      color: #a6adc8;
+      word-break: break-all;
+      background: #1e1e2e;
+      padding: 6px 8px;
+      border-radius: 4px;
+      border: 1px solid #45475a;
+    }
   </style>
 </head>
 <body>
 
   <div class="hint">
-    💡 <b>Dica:</b> Para vincular uma imagem, primeiro arraste-a para o mapa como <b>Prop</b>. Depois escolha ela no menu abaixo.
+    <b>💡 Como vincular:</b> Escolha uma imagem que já está na cena <b>OU</b> cole um link do Google Drive.<br><br>
+    <b>🎯 Para ver:</b> Clique uma vez no token, clique fora dele, e clique no token novamente para abrir a imagem.
   </div>
 
   <h3>Tokens na Cena</h3>
@@ -105,6 +141,32 @@
 
     const METADATA_KEY = 'com.example.image-link/imageUrl';
 
+    // Extrai o ID do arquivo a partir de vários formatos de link do Google Drive
+    function extractGoogleDriveId(url) {
+      if (!url) return null;
+      const trimmed = url.trim();
+      // Se o usuário já colou apenas o ID puro
+      if (/^[a-zA-Z0-9_-]{20,}$/.test(trimmed)) return trimmed;
+
+      const patterns = [
+        /\/file\/d\/([a-zA-Z0-9_-]+)/,
+        /\/d\/([a-zA-Z0-9_-]+)/,
+        /[?&]id=([a-zA-Z0-9_-]+)/
+      ];
+      for (const p of patterns) {
+        const m = trimmed.match(p);
+        if (m) return m[1];
+      }
+      return null;
+    }
+
+    // Converte o link "normal" do Drive para um link direto de imagem
+    function driveUrlToDirect(url) {
+      const id = extractGoogleDriveId(url);
+      if (!id) return null;
+      return `https://lh3.googleusercontent.com/d/${id}`;
+    }
+
     async function init() {
       if (!OBR.isAvailable) return;
 
@@ -112,12 +174,9 @@
 
       async function render() {
         const items = await OBR.scene.items.getItems();
-        
-        // Tokens: camada CHARACTER (onde normalmente ficam os personagens)
+
         const tokens = items.filter(item => item.layer === 'CHARACTER');
-        
-        // Imagens disponíveis: qualquer item com uma propriedade "image" que NÃO seja um token
-        const availableImages = items.filter(item => 
+        const availableImages = items.filter(item =>
           item.image && item.layer !== 'CHARACTER'
         );
 
@@ -125,11 +184,6 @@
 
         if (tokens.length === 0) {
           tokenList.innerHTML = '<div class="empty">Nenhum token na cena.<br>Adicione tokens na camada "Characters".</div>';
-          return;
-        }
-
-        if (availableImages.length === 0) {
-          tokenList.innerHTML = '<div class="empty">Nenhuma imagem na cena.<br>Arraste uma imagem para o mapa como "Prop" primeiro.</div>';
           return;
         }
 
@@ -153,12 +207,20 @@
 
           header.appendChild(nameSpan);
           header.appendChild(statusSpan);
+          div.appendChild(header);
 
-          // Se já está vinculado: botão de remover
           if (currentUrl) {
+            // Já está vinculado — mostra o link atual e o botão de remover
+            const linkInfo = document.createElement('div');
+            linkInfo.className = 'current-link';
+            linkInfo.textContent = currentUrl.length > 60
+              ? currentUrl.slice(0, 60) + '...'
+              : currentUrl;
+            div.appendChild(linkInfo);
+
             const removeBtn = document.createElement('button');
             removeBtn.className = 'remove';
-            removeBtn.textContent = 'Remover vínculo';
+            removeBtn.textContent = '🗑️ Remover vínculo';
             removeBtn.onclick = async () => {
               await OBR.scene.items.updateItems([token.id], (items) => {
                 for (const item of items) {
@@ -167,47 +229,70 @@
               });
               await render();
             };
-            div.appendChild(header);
             div.appendChild(removeBtn);
           } else {
-            // Se não está vinculado: dropdown + botão vincular
-            const select = document.createElement('select');
-            select.innerHTML = '<option value="">-- Escolha uma imagem --</option>';
-            
-            for (const img of availableImages) {
-              const opt = document.createElement('option');
-              opt.value = img.image.url;
-              opt.textContent = img.name || `Imagem (${img.id.slice(0, 6)})`;
-              select.appendChild(opt);
+            // Opção 1: escolher uma imagem da cena
+            if (availableImages.length > 0) {
+              const select = document.createElement('select');
+              select.innerHTML = '<option value="">-- Escolha uma imagem da cena --</option>';
+              for (const img of availableImages) {
+                const opt = document.createElement('option');
+                opt.value = img.image.url;
+                opt.textContent = img.name || `Imagem (${img.id.slice(0, 6)})`;
+                select.appendChild(opt);
+              }
+
+              const linkBtn = document.createElement('button');
+              linkBtn.className = 'link';
+              linkBtn.textContent = '🔗 Vincular imagem da cena';
+              linkBtn.onclick = async () => {
+                const url = select.value;
+                if (!url) { alert('Escolha uma imagem primeiro!'); return; }
+                await OBR.scene.items.updateItems([token.id], (items) => {
+                  for (const item of items) item.metadata[METADATA_KEY] = url;
+                });
+                await render();
+              };
+
+              div.appendChild(select);
+              div.appendChild(linkBtn);
+
+              const sep = document.createElement('div');
+              sep.className = 'separator';
+              sep.textContent = 'ou';
+              div.appendChild(sep);
             }
 
-            const linkBtn = document.createElement('button');
-            linkBtn.className = 'link';
-            linkBtn.textContent = 'Vincular imagem selecionada';
-            linkBtn.onclick = async () => {
-              const url = select.value;
-              if (!url) {
-                alert('Escolha uma imagem primeiro!');
+            // Opção 2: colar link do Google Drive
+            const driveInput = document.createElement('input');
+            driveInput.type = 'text';
+            driveInput.placeholder = 'Cole o link do Google Drive aqui...';
+
+            const driveBtn = document.createElement('button');
+            driveBtn.className = 'drive';
+            driveBtn.textContent = '📁 Vincular por link do Drive';
+            driveBtn.onclick = async () => {
+              const raw = driveInput.value.trim();
+              if (!raw) { alert('Cole um link do Google Drive primeiro!'); return; }
+              const direct = driveUrlToDirect(raw);
+              if (!direct) {
+                alert('Não foi possível reconhecer o link. Use um link do tipo:\nhttps://drive.google.com/file/d/XXXXX/view');
                 return;
               }
               await OBR.scene.items.updateItems([token.id], (items) => {
-                for (const item of items) {
-                  item.metadata[METADATA_KEY] = url;
-                }
+                for (const item of items) item.metadata[METADATA_KEY] = direct;
               });
               await render();
             };
 
-            div.appendChild(header);
-            div.appendChild(select);
-            div.appendChild(linkBtn);
+            div.appendChild(driveInput);
+            div.appendChild(driveBtn);
           }
 
           tokenList.appendChild(div);
         }
       }
 
-      // Atualiza a UI quando a cena muda (novos tokens, novas imagens, etc.)
       OBR.scene.items.onChange(() => render());
       OBR.scene.onReadyChange(async (ready) => {
         if (ready) await render();

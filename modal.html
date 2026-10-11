@@ -22,19 +22,13 @@
       animation: zoomIn 0.3s ease-out;
     }
     @keyframes zoomIn {
-      from {
-        opacity: 0;
-        transform: scale(0.8);
-      }
-      to {
-        opacity: 1;
-        transform: scale(1);
-      }
+      from { opacity: 0; transform: scale(0.8); }
+      to { opacity: 1; transform: scale(1); }
     }
   </style>
 </head>
 <body>
-  <img id="image" src="" alt="Imagem do Token">
+  <img id="image" src="" alt="Imagem do Token" referrerpolicy="no-referrer">
   <script>
     const params = new URLSearchParams(window.location.search);
     const url = params.get('url');

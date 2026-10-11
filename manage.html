@@ -80,12 +80,6 @@
       border: none;
     }
     button.link:hover { background: #74c7ec; }
-    button.drive {
-      background: #a6e3a1;
-      color: #1e1e2e;
-      border: none;
-    }
-    button.drive:hover { background: #94e2d5; }
     button.remove {
       background: #f38ba8;
       color: white;
@@ -96,7 +90,7 @@
       text-align: center;
       font-size: 11px;
       color: #6c7086;
-      margin: 2px 0;
+      margin: 4px 0;
       position: relative;
     }
     .separator::before, .separator::after {
@@ -129,7 +123,7 @@
 <body>
 
   <div class="hint">
-    <b>💡 Como vincular:</b> Escolha uma imagem que já está na cena <b>OU</b> cole um link do Google Drive.<br><br>
+    <b>💡 Como vincular:</b> Escolha uma imagem que já está na cena <b>OU</b> cole um link (Google Drive, Imgur ou URL direta).<br><br>
     <b>🎯 Para ver:</b> Clique uma vez no token, clique fora dele, e clique no token novamente para abrir a imagem.
   </div>
 
@@ -141,31 +135,15 @@
 
     const METADATA_KEY = 'com.example.image-link/imageUrl';
 
-    // Extrai o ID do arquivo a partir de vários formatos de link do Google Drive
-    function extractGoogleDriveId(url) {
-      if (!url) return null;
-      const trimmed = url.trim();
-      // Se o usuário já colou apenas o ID puro
-      if (/^[a-zA-Z0-9_-]{20,}$/.test(trimmed)) return trimmed;
-
-      const patterns = [
-        /\/file\/d\/([a-zA-Z0-9_-]+)/,
-        /\/d\/([a-zA-Z0-9_-]+)/,
-        /[?&]id=([a-zA-Z0-9_-]+)/
-      ];
-      for (const p of patterns) {
-        const m = trimmed.match(p);
-        if (m) return m[1];
-      }
+    // Validação simples para URLs que provavelmente funcionarão
+    function detectLinkType(raw) {
+      if (!raw) return null;
+      const t = raw.trim();
+      if (/drive\.google\.com|docs\.google\.com/.test(t)) return 'Google Drive';
+      if (/imgur\.com/.test(t)) return 'Imgur';
+      if (/^https?:\/\//.test(t)) return 'URL direta';
+      if (/^[a-zA-Z0-9_-]{25,}$/.test(t)) return 'Google Drive (ID)';
       return null;
-    }
-
-    // Converte o link "normal" do Drive para um link direto de imagem
-    function driveUrlToDirect(url) {
-    const id = extractGoogleDriveId(url);
-    if (!id) return null;
-    // Endpoint mais recente do Google, geralmente preserva transparência
-    return `https://drive.usercontent.google.com/download?id=${id}&export=view`;
     }
 
     async function init() {
@@ -211,7 +189,6 @@
           div.appendChild(header);
 
           if (currentUrl) {
-            // Já está vinculado — mostra o link atual e o botão de remover
             const linkInfo = document.createElement('div');
             linkInfo.className = 'current-link';
             linkInfo.textContent = currentUrl.length > 60
@@ -264,30 +241,33 @@
               div.appendChild(sep);
             }
 
-            // Opção 2: colar link do Google Drive
-            const driveInput = document.createElement('input');
-            driveInput.type = 'text';
-            driveInput.placeholder = 'Cole o link do Google Drive aqui...';
+            // Opção 2: colar qualquer link (Drive, Imgur, direto)
+            const linkInput = document.createElement('input');
+            linkInput.type = 'text';
+            linkInput.placeholder = 'Cole aqui: Drive, Imgur ou URL direta';
 
-            const driveBtn = document.createElement('button');
-            driveBtn.className = 'drive';
-            driveBtn.textContent = '📁 Vincular por link do Drive';
-            driveBtn.onclick = async () => {
-              const raw = driveInput.value.trim();
-              if (!raw) { alert('Cole um link do Google Drive primeiro!'); return; }
-              const direct = driveUrlToDirect(raw);
-              if (!direct) {
-                alert('Não foi possível reconhecer o link. Use um link do tipo:\nhttps://drive.google.com/file/d/XXXXX/view');
+            const pasteBtn = document.createElement('button');
+            pasteBtn.className = 'link';
+            pasteBtn.textContent = '🌐 Vincular por link';
+            pasteBtn.onclick = async () => {
+              const raw = linkInput.value.trim();
+              if (!raw) { alert('Cole um link primeiro!'); return; }
+
+              const type = detectLinkType(raw);
+              if (!type) {
+                alert('Link inválido. Use um link do Google Drive, Imgur ou uma URL direta de imagem.');
                 return;
               }
+
+              // Salva o link bruto — a resolução acontece no modal
               await OBR.scene.items.updateItems([token.id], (items) => {
-                for (const item of items) item.metadata[METADATA_KEY] = direct;
+                for (const item of items) item.metadata[METADATA_KEY] = raw;
               });
               await render();
             };
 
-            div.appendChild(driveInput);
-            div.appendChild(driveBtn);
+            div.appendChild(linkInput);
+            div.appendChild(pasteBtn);
           }
 
           tokenList.appendChild(div);

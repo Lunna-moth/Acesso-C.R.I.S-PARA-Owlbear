@@ -16,8 +16,6 @@
       font-family: system-ui, sans-serif;
       user-select: none;
     }
-
-    /* Viewport onde a imagem é exibida */
     #viewport {
       width: 100%;
       height: 100%;
@@ -29,8 +27,6 @@
       justify-content: center;
       align-items: center;
     }
-
-    /* Fundo xadrez (mostra transparência da imagem) */
     #viewport.checkerboard {
       background-color: #1a1a1a;
       background-image:
@@ -41,9 +37,7 @@
       background-size: 20px 20px;
       background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
     }
-
     #viewport.dragging { cursor: grabbing; }
-
     #image {
       max-width: 100%;
       max-height: 100%;
@@ -54,7 +48,6 @@
       background: transparent;
       -webkit-user-drag: none;
     }
-
     #controls {
       position: fixed;
       bottom: 12px;
@@ -68,7 +61,6 @@
       z-index: 100;
       box-shadow: 0 4px 12px rgba(0,0,0,0.5);
     }
-
     #controls button {
       width: 34px;
       height: 34px;
@@ -84,10 +76,8 @@
       justify-content: center;
       transition: 0.15s;
     }
-
     #controls button:hover { background: #45475a; }
     #controls button:active { transform: scale(0.92); }
-
     #zoom-display {
       position: fixed;
       top: 12px;
@@ -101,7 +91,6 @@
       border: 1px solid #45475a;
       z-index: 100;
     }
-
     #hint {
       position: fixed;
       bottom: 12px;
@@ -114,40 +103,157 @@
       z-index: 100;
       pointer-events: none;
     }
+    #error-msg {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(243, 139, 168, 0.15);
+      border: 1px solid #f38ba8;
+      color: #f38ba8;
+      padding: 16px 20px;
+      border-radius: 10px;
+      font-size: 13px;
+      max-width: 80%;
+      text-align: center;
+      display: none;
+      z-index: 200;
+      line-height: 1.5;
+    }
+    #loading {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #a6adc8;
+      font-size: 13px;
+      z-index: 50;
+    }
   </style>
 </head>
 <body>
   <div id="viewport" class="checkerboard">
-    <img id="image" src="" alt="Imagem do Token" referrerpolicy="no-referrer" draggable="false">
+    <img id="image" src="" alt="Imagem do Token" draggable="false" style="display:none">
   </div>
-
-  <div id="zoom-display">100%</div>
-
-  <div id="controls">
+  <div id="loading">⏳ Carregando imagem...</div>
+  <div id="error-msg"></div>
+  <div id="zoom-display" style="display:none">100%</div>
+  <div id="controls" style="display:none">
     <button id="zoom-out" title="Diminuir zoom">−</button>
     <button id="zoom-reset" title="Resetar (duplo clique também)">⟲</button>
     <button id="zoom-in" title="Aumentar zoom">+</button>
     <button id="toggle-bg" title="Alternar fundo (xadrez / transparente)">▦</button>
   </div>
-
-  <div id="hint">🖱️ Roda: zoom | Arrastar: mover | Duplo clique: resetar</div>
+  <div id="hint" style="display:none">🖱️ Roda: zoom | Arrastar: mover | Duplo clique: resetar</div>
 
   <script>
     const params = new URLSearchParams(window.location.search);
-    const url = params.get('url');
+    const rawUrl = params.get('url') ? decodeURIComponent(params.get('url')) : '';
     const img = document.getElementById('image');
     const viewport = document.getElementById('viewport');
     const zoomDisplay = document.getElementById('zoom-display');
+    const loadingEl = document.getElementById('loading');
+    const errorEl = document.getElementById('error-msg');
+    const controlsEl = document.getElementById('controls');
+    const hintEl = document.getElementById('hint');
 
-    let scale = 1;
-    let translateX = 0;
-    let translateY = 0;
+    // ───────── Resolver URL: gera lista de candidatos ─────────
+    function extractDriveId(url) {
+      if (!url) return null;
+      const patterns = [
+        /\/file\/d\/([a-zA-Z0-9_-]+)/,
+        /\/d\/([a-zA-Z0-9_-]+)/,
+        /[?&]id=([a-zA-Z0-9_-]+)/
+      ];
+      for (const p of patterns) {
+        const m = url.match(p);
+        if (m) return m[1];
+      }
+      if (/^[a-zA-Z0-9_-]{25,}$/.test(url.trim())) return url.trim();
+      return null;
+    }
+
+    function getCandidateUrls(raw) {
+      const urls = [];
+      const t = (raw || '').trim();
+      if (!t) return urls;
+
+      // Google Drive: tenta 3 endpoints em sequência
+      const driveId = extractDriveId(t);
+      if (driveId) {
+        // Endpoint 1: lh3 (mais confiável, preserva transparência)
+        urls.push(`https://lh3.googleusercontent.com/d/${driveId}`);
+        // Endpoint 2: thumbnail com tamanho grande
+        urls.push(`https://drive.google.com/thumbnail?id=${driveId}&sz=w2400`);
+        // Endpoint 3: usercontent
+        urls.push(`https://drive.usercontent.google.com/download?id=${driveId}&export=view`);
+        return urls;
+      }
+
+      // Imgur: link de página → link direto
+      const imgurPage = t.match(/^https?:\/\/(?:www\.)?imgur\.com\/([a-zA-Z0-9]+)(?:\.(png|jpe?g|gif|webp))?$/i);
+      if (imgurPage && !/i\.imgur\.com/.test(t)) {
+        urls.push(`https://i.imgur.com/${imgurPage[1]}.png`);
+        urls.push(`https://i.imgur.com/${imgurPage[1]}.jpg`);
+        return urls;
+      }
+
+      // URL normal (inclui i.imgur.com, assets do Owlbear, etc.)
+      urls.push(t);
+      return urls;
+    }
+
+    // ───────── Tentar carregar com fallback ─────────
+    const candidates = getCandidateUrls(rawUrl);
+    let currentIdx = 0;
+    let loadedSuccessfully = false;
+
+    if (candidates.length === 0) {
+      showError('Nenhum link foi fornecido.');
+    } else {
+      tryLoad();
+    }
+
+    function tryLoad() {
+      if (currentIdx >= candidates.length) {
+        showError(
+          '❌ Não foi possível carregar a imagem.<br><br>' +
+          'Verifique se:<br>' +
+          '• O arquivo está compartilhado como <b>"Qualquer pessoa com o link"</b><br>' +
+          '• O link está correto<br>' +
+          '• A imagem é um PNG, JPG, GIF ou WEBP'
+        );
+        return;
+      }
+      img.src = candidates[currentIdx];
+    }
+
+    img.onload = () => {
+      loadedSuccessfully = true;
+      loadingEl.style.display = 'none';
+      img.style.display = '';
+      zoomDisplay.style.display = '';
+      controlsEl.style.display = '';
+      hintEl.style.display = '';
+      applyTransform();
+    };
+
+    img.onerror = () => {
+      currentIdx++;
+      tryLoad();
+    };
+
+    function showError(html) {
+      loadingEl.style.display = 'none';
+      errorEl.innerHTML = html;
+      errorEl.style.display = 'block';
+    }
+
+    // ───────── Zoom e pan ─────────
+    let scale = 1, translateX = 0, translateY = 0;
     let isDragging = false;
-    let dragStartX = 0, dragStartY = 0;
-    let dragStartTX = 0, dragStartTY = 0;
-
-    const MIN_SCALE = 0.1;
-    const MAX_SCALE = 20;
+    let dragStartX = 0, dragStartY = 0, dragStartTX = 0, dragStartTY = 0;
+    const MIN_SCALE = 0.1, MAX_SCALE = 20;
 
     function applyTransform() {
       img.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
@@ -172,18 +278,15 @@
       applyTransform();
     }
 
-    if (url) img.src = decodeURIComponent(url);
-
-    // Zoom com roda
     viewport.addEventListener('wheel', (e) => {
+      if (!loadedSuccessfully) return;
       e.preventDefault();
       const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
       zoomAt(e.clientX, e.clientY, factor);
     }, { passive: false });
 
-    // Pan com mouse
     viewport.addEventListener('mousedown', (e) => {
-      if (e.button !== 0) return;
+      if (!loadedSuccessfully || e.button !== 0) return;
       isDragging = true;
       viewport.classList.add('dragging');
       dragStartX = e.clientX;
@@ -204,15 +307,16 @@
       viewport.classList.remove('dragging');
     });
 
-    // Duplo clique reseta
     viewport.addEventListener('dblclick', (e) => {
+      if (!loadedSuccessfully) return;
       e.preventDefault();
       resetView();
     });
 
-    // Toque (mobile)
+    // Toque (mobile/tablet)
     let touchDist = 0, touchScale = 1;
     viewport.addEventListener('touchstart', (e) => {
+      if (!loadedSuccessfully) return;
       if (e.touches.length === 1) {
         isDragging = true;
         dragStartX = e.touches[0].clientX;
@@ -229,6 +333,7 @@
     }, { passive: true });
 
     viewport.addEventListener('touchmove', (e) => {
+      if (!loadedSuccessfully) return;
       if (e.touches.length === 1 && isDragging) {
         translateX = dragStartTX + (e.touches[0].clientX - dragStartX);
         translateY = dragStartTY + (e.touches[0].clientY - dragStartY);
@@ -244,7 +349,6 @@
 
     viewport.addEventListener('touchend', () => { isDragging = false; });
 
-    // Botões
     document.getElementById('zoom-in').onclick = () => {
       const r = viewport.getBoundingClientRect();
       zoomAt(r.left + r.width / 2, r.top + r.height / 2, 1.3);
@@ -257,8 +361,6 @@
     document.getElementById('toggle-bg').onclick = () => {
       viewport.classList.toggle('checkerboard');
     };
-
-    applyTransform();
   </script>
 </body>
 </html>

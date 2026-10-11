@@ -14,12 +14,9 @@
     OBR.onReady(async () => {
       if (!OBR.isAvailable) return;
 
-      // Guarda o token que foi clicado pela primeira vez
       let armedTokenId = null;
 
       OBR.player.onChange(async (player) => {
-        // Se nada ou vários itens estão selecionados, só ignora
-        // (não reseta o armedTokenId, senão perde o estado)
         if (!player.selection || player.selection.length !== 1) {
           return;
         }
@@ -27,7 +24,7 @@
         const itemId = player.selection[0];
 
         if (itemId === armedTokenId) {
-          // 🎯 SEGUNDO clique no mesmo token → abre o modal
+          // 🎯 Segundo clique → abre o modal
           armedTokenId = null;
 
           const items = await OBR.scene.items.getItems([itemId]);
@@ -40,13 +37,13 @@
           OBR.modal.open({
             id: MODAL_ID,
             url: `/modal.html?url=${encodeURIComponent(imageUrl)}`,
-            width: 600,
-            height: 400,
+            width: 780,   // ← antes era 600 (+30%)
+            height: 520,  // ← antes era 400 (+30%)
             fullScreen: false,
             hideBackdrop: false
           });
         } else {
-          // 👆 PRIMEIRO clique neste token → apenas arma
+          // 👆 Primeiro clique → apenas arma
           armedTokenId = itemId;
         }
       });

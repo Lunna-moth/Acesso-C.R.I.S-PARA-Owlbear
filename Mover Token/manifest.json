@@ -1,0 +1,14 @@
+{
+  "name": "Mover Token",
+  "version": "1.0.0",
+  "manifest_version": 1,
+  "description": "Mova tokens de um ponto a outro com animação suave.",
+  "action": {
+    "title": "🚶 Mover Token",
+    "icon": "/move-icon.svg",
+    "popover": "/move.html",
+    "height": 520,
+    "width": 340
+  },
+  "background_url": "/move-background.html"
+}

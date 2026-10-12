@@ -36,9 +36,11 @@
     }
     #viewport.dragging { cursor: grabbing; }
 
+    /* CAMADA DE IMAGEM — sem translate no CSS (JS cuida disso) */
     .image-layer {
       position: absolute;
-      top: 50%; left: 50%;
+      top: 50%;
+      left: 50%;
       max-width: 100%;
       max-height: 100%;
       object-fit: contain;
@@ -48,7 +50,6 @@
       background: transparent;
       -webkit-user-drag: none;
       transition: opacity 0.4s ease;
-      translate: -50% -50%;
     }
     #image-normal { opacity: 1; }
     #image-uv { opacity: 0; }
@@ -70,7 +71,6 @@
     }
     body.uv-active #uv-overlay { opacity: 1; }
 
-    /* Brilho roxo na imagem UV */
     body.uv-active #viewport {
       box-shadow: inset 0 0 80px rgba(180, 130, 255, 0.35);
       transition: box-shadow 0.35s;
@@ -236,21 +236,13 @@
       return urls;
     }
 
-    // Carrega uma imagem tentando vários candidatos em sequência
     function loadWithFallback(imgEl, raw, onDone) {
       const candidates = getCandidateUrls(raw);
       let idx = 0;
-
-      if (candidates.length === 0) {
-        onDone(false);
-        return;
-      }
+      if (candidates.length === 0) { onDone(false); return; }
 
       function attempt() {
-        if (idx >= candidates.length) {
-          onDone(false);
-          return;
-        }
+        if (idx >= candidates.length) { onDone(false); return; }
         imgEl.src = candidates[idx];
       }
 
@@ -264,6 +256,7 @@
     const hasUV = !!rawUV;
     let loadedCount = 0;
     const totalToLoad = (hasNormal ? 1 : 0) + (hasUV ? 1 : 0);
+    let anyLoaded = false;
 
     if (totalToLoad === 0) {
       showError('Nenhum link foi fornecido.');
@@ -279,14 +272,10 @@
           if (ok) imgUV.style.display = '';
           done(ok);
         });
-        // Mostra botão UV somente se há imagem UV vinculada
         uvBtn.style.display = 'flex';
-      } else {
-        // Se não tem UV, e a normal falhar, mostra erro
       }
     }
 
-    let anyLoaded = false;
     function done(ok) {
       if (ok) anyLoaded = true;
       loadedCount++;
@@ -323,6 +312,7 @@
     const MIN_SCALE = 0.1, MAX_SCALE = 20;
 
     function applyTransform() {
+      // A ORDEM IMPORTA: translate(-50%, -50%) centraliza, depois aplicamos pan + zoom
       const t = `translate(-50%, -50%) translate(${translateX}px, ${translateY}px) scale(${scale})`;
       imgNormal.style.transform = t;
       imgUV.style.transform = t;
@@ -430,7 +420,6 @@
     }
     uvBtn.onclick = toggleUV;
 
-    // Atalho de teclado: U
     window.addEventListener('keydown', (e) => {
       if (e.key === 'u' || e.key === 'U') toggleUV();
     });

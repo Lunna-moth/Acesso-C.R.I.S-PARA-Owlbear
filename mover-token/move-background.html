@@ -11,6 +11,16 @@
     const MOVE_CHANNEL = 'com.example.move-token/start';
     const TOOL_ID = 'com.example.move-token/draw-path';
 
+    // ═══════════ CONFIGURAÇÃO DE PERFORMANCE ═══════════
+    // Taxa de atualizações de rede por segundo. Menor = mais suave em internet ruim.
+    // 20 = muito suave em qualquer conexão, mas pode parecer lento em conexões rápidas
+    // 30 = padrão, bom equilíbrio
+    // 45 = mais fluido em conexões rápidas, pode engasgar em internet ruim
+    const NETWORK_FPS = 25;
+
+    // Se o tempo entre updates ultrapassar isso, dobra o intervalo (modo adaptativo)
+    const ADAPTIVE_THRESHOLD_MS = 120;
+
     // ═══════════ EASING ═══════════
     const EASING_FNS = {
       linear: (t) => t,
@@ -19,7 +29,7 @@
       easeInOutQuad: (t) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
     };
 
-    // ═══════════ ANIMAÇÃO ═══════════
+    // ═══════════ ANIMAÇÃO OTIMIZADA ═══════════
     async function animateToken(tokenId, waypoints, duration, easingName) {
       if (!waypoints || waypoints.length === 0) return;
 
@@ -29,6 +39,7 @@
       const startPos = items[0].position;
       const path = [{ x: startPos.x, y: startPos.y }, ...waypoints];
 
+      // Comprimentos dos segmentos
       const segLengths = [];
       let totalLength = 0;
       for (let i = 1; i < path.length; i++) {
@@ -58,22 +69,51 @@
         return path[path.length - 1];
       }
 
+      // Intervalo adaptativo (começa com base no NETWORK_FPS)
+      let updateInterval = 1000 / NETWORK_FPS;
+      let lastUpdateTime = 0;
+      let lastSentPosition = { x: startPos.x, y: startPos.y };
+
       return new Promise((resolve) => {
         function frame() {
-          const t = Math.min(1, (performance.now() - startTime) / duration);
+          const now = performance.now();
+          const t = Math.min(1, (now - startTime) / duration);
           const eased = easeFn(t);
-          const pos = positionAt(eased);
+          const targetPos = positionAt(eased);
 
-          OBR.scene.items.updateItems([tokenId], (items) => {
-            for (const item of items) {
-              item.position.x = pos.x;
-              item.position.y = pos.y;
-            }
-          });
+          const timeSinceLastUpdate = now - lastUpdateTime;
+          const isLastFrame = t >= 1;
 
-          if (t < 1) {
+          // Só envia para a rede se o intervalo passou OU é o último frame
+          if (timeSinceLastUpdate >= updateInterval || isLastFrame) {
+            const sendStart = performance.now();
+            lastUpdateTime = now;
+
+            // Fire and forget: dispara sem esperar
+            OBR.scene.items.updateItems([tokenId], (items) => {
+              for (const item of items) {
+                item.position.x = targetPos.x;
+                item.position.y = targetPos.y;
+              }
+            }).then(() => {
+              // Mede o tempo real de round-trip
+              const rtt = performance.now() - sendStart;
+              // Adaptação: se a rede está lenta, aumentamos o intervalo
+              if (rtt > ADAPTIVE_THRESHOLD_MS) {
+                updateInterval = Math.min(200, updateInterval * 1.15);
+              } else if (rtt < 40) {
+                // Se está rápido, reduzimos (não menos que 1000/NETWORK_FPS)
+                updateInterval = Math.max(1000 / NETWORK_FPS, updateInterval * 0.95);
+              }
+            }).catch((e) => console.warn('updateItems falhou:', e));
+
+            lastSentPosition = targetPos;
+          }
+
+          if (!isLastFrame) {
             requestAnimationFrame(frame);
           } else {
+            // Garantia final: posição exata do último ponto
             const end = path[path.length - 1];
             OBR.scene.items.updateItems([tokenId], (items) => {
               for (const item of items) {
@@ -135,14 +175,13 @@
       }
     }
 
-    // ═══════════ TOOL: DESENHAR CAMINHO ═══════════
+    // ═══════════ TOOL MODE ═══════════
     let currentPath = [];
     let isDrawing = false;
 
     OBR.onReady(async () => {
       if (!OBR.isAvailable) return;
 
-      // ── Cria o modo de ferramenta (correto) ──
       try {
         await OBR.tool.createMode({
           id: TOOL_ID,
@@ -153,7 +192,6 @@
           }],
           shortcut: 'P',
           defaultMetadata: {},
-          // ── Eventos de arrasto definidos AQUI dentro ──
           onToolDragStart: (context, event) => {
             if (context.activeMode !== TOOL_ID) return;
             currentPath = [{ x: event.pointerPosition.x, y: event.pointerPosition.y }];
@@ -206,7 +244,6 @@
         console.error('Erro ao criar tool mode:', e);
       }
 
-      // ── Movimento direto (via popover) ──
       OBR.broadcast.onMessage(MOVE_CHANNEL, async (event) => {
         const { tokenId, endX, endY, duration, easing } = event.data || {};
         if (!tokenId) return;

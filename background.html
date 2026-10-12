@@ -8,7 +8,8 @@
   <script type="module">
     import OBR from 'https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3.1.0/+esm';
 
-    const METADATA_KEY = 'com.example.image-link/imageUrl';
+    const KEY_NORMAL = 'com.example.image-link/imageUrl';
+    const KEY_UV = 'com.example.image-link/uvImageUrl';
     const MODAL_ID = 'com.example.image-link/modal';
 
     OBR.onReady(async () => {
@@ -17,33 +18,36 @@
       let armedTokenId = null;
 
       OBR.player.onChange(async (player) => {
-        if (!player.selection || player.selection.length !== 1) {
-          return;
-        }
+        if (!player.selection || player.selection.length !== 1) return;
 
         const itemId = player.selection[0];
 
         if (itemId === armedTokenId) {
-          // 🎯 Segundo clique → abre o modal
           armedTokenId = null;
 
           const items = await OBR.scene.items.getItems([itemId]);
           if (items.length === 0) return;
 
           const item = items[0];
-          const imageUrl = item.metadata[METADATA_KEY];
-          if (!imageUrl) return;
+          const normalUrl = item.metadata[KEY_NORMAL] || '';
+          const uvUrl = item.metadata[KEY_UV] || '';
+
+          // Só abre o modal se houver pelo menos uma das imagens
+          if (!normalUrl && !uvUrl) return;
+
+          const params = new URLSearchParams();
+          if (normalUrl) params.set('url', normalUrl);
+          if (uvUrl) params.set('uvUrl', uvUrl);
 
           OBR.modal.open({
             id: MODAL_ID,
-            url: `/modal.html?url=${encodeURIComponent(imageUrl)}`,
-            width: 780,   // ← antes era 600 (+30%)
-            height: 520,  // ← antes era 400 (+30%)
+            url: `/modal.html?${params.toString()}`,
+            width: 780,
+            height: 520,
             fullScreen: false,
             hideBackdrop: false
           });
         } else {
-          // 👆 Primeiro clique → apenas arma
           armedTokenId = itemId;
         }
       });

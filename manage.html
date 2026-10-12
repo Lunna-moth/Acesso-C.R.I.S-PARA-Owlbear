@@ -18,7 +18,7 @@
     }
     h3 { margin: 0; font-size: 15px; }
     .hint {
-      font-size: 12px;
+      font-size: 11px;
       color: #a6adc8;
       background: #313244;
       padding: 8px;
@@ -31,7 +31,7 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
-      max-height: 500px;
+      max-height: 480px;
       overflow-y: auto;
     }
     .token-item {
@@ -57,20 +57,46 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .status { font-size: 12px; white-space: nowrap; }
-    .linked { color: #a6e3a1; }
-    .unlinked { color: #f38ba8; }
+    .badges { font-size: 12px; white-space: nowrap; }
+    .slot {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      background: #1e1e2e;
+      padding: 8px;
+      border-radius: 6px;
+      border: 1px solid #45475a;
+    }
+    .slot.uv { border-color: #6c3fc7; }
+    .slot-label {
+      font-size: 11px;
+      font-weight: bold;
+      letter-spacing: 0.3px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .slot.uv .slot-label { color: #c4a7ff; }
+    .slot.normal .slot-label { color: #89b4fa; }
+    .slot-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .slot-actions > * { flex-shrink: 0; }
+    .slot-actions select,
+    .slot-actions input { flex: 1; min-width: 0; }
     select, button, input[type="text"] {
-      padding: 6px 10px;
+      padding: 5px 8px;
       border-radius: 6px;
       border: 1px solid #45475a;
       background: #1e1e2e;
       color: #cdd6f4;
-      font-size: 13px;
+      font-size: 12px;
       font-family: inherit;
       box-sizing: border-box;
     }
-    input[type="text"] { width: 100%; font-size: 12px; }
+    input[type="text"] { width: 100%; }
     input[type="text"]::placeholder { color: #6c7086; }
     select { width: 100%; cursor: pointer; }
     button { cursor: pointer; font-weight: bold; }
@@ -78,53 +104,51 @@
       background: #89b4fa;
       color: #1e1e2e;
       border: none;
+      padding: 5px 8px;
+      font-size: 11px;
     }
     button.link:hover { background: #74c7ec; }
+    button.link.uv {
+      background: #c4a7ff;
+      color: #1e1e2e;
+    }
+    button.link.uv:hover { background: #a686e8; }
     button.remove {
       background: #f38ba8;
       color: white;
       border: none;
+      padding: 5px 8px;
+      font-size: 11px;
+      border-radius: 6px;
     }
     button.remove:hover { background: #e64553; }
-    .separator {
-      text-align: center;
-      font-size: 11px;
-      color: #6c7086;
-      margin: 4px 0;
-      position: relative;
+    .current-link {
+      font-size: 10px;
+      color: #a6adc8;
+      word-break: break-all;
+      background: #313244;
+      padding: 5px 7px;
+      border-radius: 4px;
+      border: 1px solid #45475a;
     }
-    .separator::before, .separator::after {
-      content: '';
-      position: absolute;
-      top: 50%;
-      width: 40%;
-      height: 1px;
-      background: #45475a;
-    }
-    .separator::before { left: 0; }
-    .separator::after { right: 0; }
     .empty {
       text-align: center;
       padding: 20px;
       color: #6c7086;
       font-size: 13px;
     }
-    .current-link {
-      font-size: 11px;
-      color: #a6adc8;
-      word-break: break-all;
-      background: #1e1e2e;
-      padding: 6px 8px;
-      border-radius: 4px;
-      border: 1px solid #45475a;
+    .divider {
+      height: 1px;
+      background: #45475a;
+      margin: 2px 0;
     }
   </style>
 </head>
 <body>
 
   <div class="hint">
-    <b>💡 Como vincular:</b> Escolha uma imagem que já está na cena <b>OU</b> cole um link (Google Drive, Imgur ou URL direta).<br><br>
-    <b>🎯 Para ver:</b> Clique uma vez no token, clique fora dele, e clique no token novamente para abrir a imagem.
+    <b>💡 Como vincular:</b> Para cada token, você pode vincular uma <b>imagem normal</b> (📷) e uma <b>imagem UV</b> (🔦).<br><br>
+    <b>🎯 Para ver:</b> Clique uma vez no token, clique fora, e clique novamente para abrir. No modal, use o botão 🔦 para simular luz UV.
   </div>
 
   <h3>Tokens na Cena</h3>
@@ -133,9 +157,9 @@
   <script type="module">
     import OBR from 'https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3.1.0/+esm';
 
-    const METADATA_KEY = 'com.example.image-link/imageUrl';
+    const KEY_NORMAL = 'com.example.image-link/imageUrl';
+    const KEY_UV = 'com.example.image-link/uvImageUrl';
 
-    // Validação simples para URLs que provavelmente funcionarão
     function detectLinkType(raw) {
       if (!raw) return null;
       const t = raw.trim();
@@ -151,9 +175,111 @@
 
       const tokenList = document.getElementById('token-list');
 
+      // Cria o bloco de UI de um slot (Normal ou UV) para um token
+      function buildSlot(token, kind, availableImages) {
+        const isUV = kind === 'uv';
+        const metadataKey = isUV ? KEY_UV : KEY_NORMAL;
+        const current = token.metadata[metadataKey];
+
+        const slot = document.createElement('div');
+        slot.className = 'slot ' + (isUV ? 'uv' : 'normal');
+
+        const label = document.createElement('div');
+        label.className = 'slot-label';
+        label.innerHTML = isUV ? '🔦 Imagem UV' : '📷 Imagem Normal';
+
+        const status = document.createElement('span');
+        status.style.fontSize = '10px';
+        status.textContent = current ? '✅ vinculado' : '—';
+        status.style.color = current ? '#a6e3a1' : '#6c7086';
+        label.appendChild(status);
+        slot.appendChild(label);
+
+        if (current) {
+          const info = document.createElement('div');
+          info.className = 'current-link';
+          info.textContent = current.length > 55 ? current.slice(0, 55) + '...' : current;
+          slot.appendChild(info);
+
+          const actions = document.createElement('div');
+          actions.className = 'slot-actions';
+          actions.style.justifyContent = 'flex-end';
+
+          const removeBtn = document.createElement('button');
+          removeBtn.className = 'remove';
+          removeBtn.textContent = '🗑️ Remover';
+          removeBtn.onclick = async () => {
+            await OBR.scene.items.updateItems([token.id], (items) => {
+              for (const item of items) delete item.metadata[metadataKey];
+            });
+            await render();
+          };
+          actions.appendChild(removeBtn);
+          slot.appendChild(actions);
+        } else {
+          // Dropdown de imagens da cena
+          if (availableImages.length > 0) {
+            const select = document.createElement('select');
+            select.innerHTML = '<option value="">-- Imagem da cena --</option>';
+            for (const img of availableImages) {
+              const opt = document.createElement('option');
+              opt.value = img.image.url;
+              opt.textContent = img.name || `Img ${img.id.slice(0, 5)}`;
+              select.appendChild(opt);
+            }
+
+            const linkSceneBtn = document.createElement('button');
+            linkSceneBtn.className = 'link' + (isUV ? ' uv' : '');
+            linkSceneBtn.textContent = '🔗 Da cena';
+            linkSceneBtn.onclick = async () => {
+              const url = select.value;
+              if (!url) { alert('Escolha uma imagem primeiro!'); return; }
+              await OBR.scene.items.updateItems([token.id], (items) => {
+                for (const item of items) item.metadata[metadataKey] = url;
+              });
+              await render();
+            };
+
+            const row1 = document.createElement('div');
+            row1.className = 'slot-actions';
+            row1.appendChild(select);
+            row1.appendChild(linkSceneBtn);
+            slot.appendChild(row1);
+          }
+
+          // Input para link externo
+          const linkInput = document.createElement('input');
+          linkInput.type = 'text';
+          linkInput.placeholder = 'Cole um link (Drive, Imgur, URL)...';
+
+          const pasteBtn = document.createElement('button');
+          pasteBtn.className = 'link' + (isUV ? ' uv' : '');
+          pasteBtn.textContent = '🌐 Link';
+          pasteBtn.onclick = async () => {
+            const raw = linkInput.value.trim();
+            if (!raw) { alert('Cole um link primeiro!'); return; }
+            if (!detectLinkType(raw)) {
+              alert('Link inválido. Use Drive, Imgur ou URL direta.');
+              return;
+            }
+            await OBR.scene.items.updateItems([token.id], (items) => {
+              for (const item of items) item.metadata[metadataKey] = raw;
+            });
+            await render();
+          };
+
+          const row2 = document.createElement('div');
+          row2.className = 'slot-actions';
+          row2.appendChild(linkInput);
+          row2.appendChild(pasteBtn);
+          slot.appendChild(row2);
+        }
+
+        return slot;
+      }
+
       async function render() {
         const items = await OBR.scene.items.getItems();
-
         const tokens = items.filter(item => item.layer === 'CHARACTER');
         const availableImages = items.filter(item =>
           item.image && item.layer !== 'CHARACTER'
@@ -167,118 +293,43 @@
         }
 
         for (const token of tokens) {
-          const currentUrl = token.metadata[METADATA_KEY];
-          const tokenName = token.name || 'Token sem nome';
+          const hasNormal = !!token.metadata[KEY_NORMAL];
+          const hasUV = !!token.metadata[KEY_UV];
 
-          const div = document.createElement('div');
-          div.className = 'token-item';
+          const card = document.createElement('div');
+          card.className = 'token-item';
 
           const header = document.createElement('div');
           header.className = 'token-header';
 
           const nameSpan = document.createElement('span');
           nameSpan.className = 'token-name';
-          nameSpan.textContent = tokenName;
+          nameSpan.textContent = token.name || 'Token sem nome';
 
-          const statusSpan = document.createElement('span');
-          statusSpan.className = 'status ' + (currentUrl ? 'linked' : 'unlinked');
-          statusSpan.textContent = currentUrl ? '✅ Vinculado' : '❌ Sem vínculo';
+          const badges = document.createElement('span');
+          badges.className = 'badges';
+          badges.innerHTML =
+            `<span style="color:${hasNormal ? '#a6e3a1' : '#6c7086'}">📷</span> ` +
+            `<span style="color:${hasUV ? '#c4a7ff' : '#6c7086'}">🔦</span>`;
 
           header.appendChild(nameSpan);
-          header.appendChild(statusSpan);
-          div.appendChild(header);
+          header.appendChild(badges);
+          card.appendChild(header);
 
-          if (currentUrl) {
-            const linkInfo = document.createElement('div');
-            linkInfo.className = 'current-link';
-            linkInfo.textContent = currentUrl.length > 60
-              ? currentUrl.slice(0, 60) + '...'
-              : currentUrl;
-            div.appendChild(linkInfo);
+          card.appendChild(buildSlot(token, 'normal', availableImages));
 
-            const removeBtn = document.createElement('button');
-            removeBtn.className = 'remove';
-            removeBtn.textContent = '🗑️ Remover vínculo';
-            removeBtn.onclick = async () => {
-              await OBR.scene.items.updateItems([token.id], (items) => {
-                for (const item of items) {
-                  delete item.metadata[METADATA_KEY];
-                }
-              });
-              await render();
-            };
-            div.appendChild(removeBtn);
-          } else {
-            // Opção 1: escolher uma imagem da cena
-            if (availableImages.length > 0) {
-              const select = document.createElement('select');
-              select.innerHTML = '<option value="">-- Escolha uma imagem da cena --</option>';
-              for (const img of availableImages) {
-                const opt = document.createElement('option');
-                opt.value = img.image.url;
-                opt.textContent = img.name || `Imagem (${img.id.slice(0, 6)})`;
-                select.appendChild(opt);
-              }
+          const divider = document.createElement('div');
+          divider.className = 'divider';
+          card.appendChild(divider);
 
-              const linkBtn = document.createElement('button');
-              linkBtn.className = 'link';
-              linkBtn.textContent = '🔗 Vincular imagem da cena';
-              linkBtn.onclick = async () => {
-                const url = select.value;
-                if (!url) { alert('Escolha uma imagem primeiro!'); return; }
-                await OBR.scene.items.updateItems([token.id], (items) => {
-                  for (const item of items) item.metadata[METADATA_KEY] = url;
-                });
-                await render();
-              };
+          card.appendChild(buildSlot(token, 'uv', availableImages));
 
-              div.appendChild(select);
-              div.appendChild(linkBtn);
-
-              const sep = document.createElement('div');
-              sep.className = 'separator';
-              sep.textContent = 'ou';
-              div.appendChild(sep);
-            }
-
-            // Opção 2: colar qualquer link (Drive, Imgur, direto)
-            const linkInput = document.createElement('input');
-            linkInput.type = 'text';
-            linkInput.placeholder = 'Cole aqui: Drive, Imgur ou URL direta';
-
-            const pasteBtn = document.createElement('button');
-            pasteBtn.className = 'link';
-            pasteBtn.textContent = '🌐 Vincular por link';
-            pasteBtn.onclick = async () => {
-              const raw = linkInput.value.trim();
-              if (!raw) { alert('Cole um link primeiro!'); return; }
-
-              const type = detectLinkType(raw);
-              if (!type) {
-                alert('Link inválido. Use um link do Google Drive, Imgur ou uma URL direta de imagem.');
-                return;
-              }
-
-              // Salva o link bruto — a resolução acontece no modal
-              await OBR.scene.items.updateItems([token.id], (items) => {
-                for (const item of items) item.metadata[METADATA_KEY] = raw;
-              });
-              await render();
-            };
-
-            div.appendChild(linkInput);
-            div.appendChild(pasteBtn);
-          }
-
-          tokenList.appendChild(div);
+          tokenList.appendChild(card);
         }
       }
 
       OBR.scene.items.onChange(() => render());
-      OBR.scene.onReadyChange(async (ready) => {
-        if (ready) await render();
-      });
-
+      OBR.scene.onReadyChange(async (ready) => { if (ready) await render(); });
       await render();
     }
 

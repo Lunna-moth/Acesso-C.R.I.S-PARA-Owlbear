@@ -7,18 +7,15 @@
   <style>
     * { box-sizing: border-box; }
     html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
       overflow: hidden;
       background: transparent;
       font-family: system-ui, sans-serif;
       user-select: none;
     }
     #viewport {
-      width: 100%;
-      height: 100%;
+      width: 100%; height: 100%;
       position: relative;
       overflow: hidden;
       cursor: grab;
@@ -38,16 +35,47 @@
       background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
     }
     #viewport.dragging { cursor: grabbing; }
-    #image {
+
+    .image-layer {
+      position: absolute;
+      top: 50%; left: 50%;
       max-width: 100%;
       max-height: 100%;
       object-fit: contain;
       transform-origin: center center;
       pointer-events: none;
-      will-change: transform;
+      will-change: transform, opacity;
       background: transparent;
       -webkit-user-drag: none;
+      transition: opacity 0.4s ease;
+      translate: -50% -50%;
     }
+    #image-normal { opacity: 1; }
+    #image-uv { opacity: 0; }
+    body.uv-active #image-normal { opacity: 0; }
+    body.uv-active #image-uv { opacity: 1; }
+
+    /* Overlay de luz UV */
+    #uv-overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(circle at 50% 50%,
+        rgba(140, 90, 240, 0.28),
+        rgba(60, 20, 120, 0.55));
+      mix-blend-mode: screen;
+      opacity: 0;
+      transition: opacity 0.35s ease;
+      z-index: 50;
+    }
+    body.uv-active #uv-overlay { opacity: 1; }
+
+    /* Brilho roxo na imagem UV */
+    body.uv-active #viewport {
+      box-shadow: inset 0 0 80px rgba(180, 130, 255, 0.35);
+      transition: box-shadow 0.35s;
+    }
+
     #controls {
       position: fixed;
       bottom: 12px;
@@ -62,26 +90,32 @@
       box-shadow: 0 4px 12px rgba(0,0,0,0.5);
     }
     #controls button {
-      width: 34px;
-      height: 34px;
-      border: none;
-      border-radius: 6px;
+      width: 34px; height: 34px;
+      border: none; border-radius: 6px;
       background: #313244;
       color: #cdd6f4;
       cursor: pointer;
       font-size: 16px;
       font-weight: bold;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      display: flex; align-items: center; justify-content: center;
       transition: 0.15s;
     }
     #controls button:hover { background: #45475a; }
     #controls button:active { transform: scale(0.92); }
+    #uv-btn {
+      background: #3a2a5f !important;
+      color: #c4a7ff !important;
+    }
+    #uv-btn:hover { background: #503a80 !important; }
+    body.uv-active #uv-btn {
+      background: #c4a7ff !important;
+      color: #1e1e2e !important;
+      box-shadow: 0 0 15px #c4a7ff;
+    }
+
     #zoom-display {
       position: fixed;
-      top: 12px;
-      left: 12px;
+      top: 12px; left: 12px;
       background: rgba(30, 30, 46, 0.9);
       color: #cdd6f4;
       padding: 4px 10px;
@@ -93,8 +127,7 @@
     }
     #hint {
       position: fixed;
-      bottom: 12px;
-      left: 12px;
+      bottom: 12px; left: 12px;
       background: rgba(30, 30, 46, 0.75);
       color: #a6adc8;
       padding: 4px 10px;
@@ -105,8 +138,7 @@
     }
     #error-msg {
       position: fixed;
-      top: 50%;
-      left: 50%;
+      top: 50%; left: 50%;
       transform: translate(-50%, -50%);
       background: rgba(243, 139, 168, 0.15);
       border: 1px solid #f38ba8;
@@ -122,8 +154,7 @@
     }
     #loading {
       position: fixed;
-      top: 50%;
-      left: 50%;
+      top: 50%; left: 50%;
       transform: translate(-50%, -50%);
       color: #a6adc8;
       font-size: 13px;
@@ -133,8 +164,11 @@
 </head>
 <body>
   <div id="viewport" class="checkerboard">
-    <img id="image" src="" alt="Imagem do Token" draggable="false" style="display:none">
+    <img id="image-normal" class="image-layer" src="" alt="" draggable="false" style="display:none">
+    <img id="image-uv" class="image-layer" src="" alt="" draggable="false" style="display:none">
   </div>
+  <div id="uv-overlay"></div>
+
   <div id="loading">⏳ Carregando imagem...</div>
   <div id="error-msg"></div>
   <div id="zoom-display" style="display:none">100%</div>
@@ -143,21 +177,26 @@
     <button id="zoom-reset" title="Resetar (duplo clique também)">⟲</button>
     <button id="zoom-in" title="Aumentar zoom">+</button>
     <button id="toggle-bg" title="Alternar fundo (xadrez / transparente)">▦</button>
+    <button id="uv-btn" title="Ativar/desativar luz UV (tecla U)" style="display:none">🔦</button>
   </div>
   <div id="hint" style="display:none">🖱️ Roda: zoom | Arrastar: mover | Duplo clique: resetar</div>
 
   <script>
     const params = new URLSearchParams(window.location.search);
-    const rawUrl = params.get('url') ? decodeURIComponent(params.get('url')) : '';
-    const img = document.getElementById('image');
+    const rawNormal = params.get('url') ? decodeURIComponent(params.get('url')) : '';
+    const rawUV = params.get('uvUrl') ? decodeURIComponent(params.get('uvUrl')) : '';
+
+    const imgNormal = document.getElementById('image-normal');
+    const imgUV = document.getElementById('image-uv');
     const viewport = document.getElementById('viewport');
     const zoomDisplay = document.getElementById('zoom-display');
     const loadingEl = document.getElementById('loading');
     const errorEl = document.getElementById('error-msg');
     const controlsEl = document.getElementById('controls');
     const hintEl = document.getElementById('hint');
+    const uvBtn = document.getElementById('uv-btn');
 
-    // ───────── Resolver URL: gera lista de candidatos ─────────
+    // ────────── Resolver URLs com fallback (Drive/Imgur) ──────────
     function extractDriveId(url) {
       if (!url) return null;
       const patterns = [
@@ -178,19 +217,14 @@
       const t = (raw || '').trim();
       if (!t) return urls;
 
-      // Google Drive: tenta 3 endpoints em sequência
       const driveId = extractDriveId(t);
       if (driveId) {
-        // Endpoint 1: lh3 (mais confiável, preserva transparência)
         urls.push(`https://lh3.googleusercontent.com/d/${driveId}`);
-        // Endpoint 2: thumbnail com tamanho grande
         urls.push(`https://drive.google.com/thumbnail?id=${driveId}&sz=w2400`);
-        // Endpoint 3: usercontent
         urls.push(`https://drive.usercontent.google.com/download?id=${driveId}&export=view`);
         return urls;
       }
 
-      // Imgur: link de página → link direto
       const imgurPage = t.match(/^https?:\/\/(?:www\.)?imgur\.com\/([a-zA-Z0-9]+)(?:\.(png|jpe?g|gif|webp))?$/i);
       if (imgurPage && !/i\.imgur\.com/.test(t)) {
         urls.push(`https://i.imgur.com/${imgurPage[1]}.png`);
@@ -198,50 +232,83 @@
         return urls;
       }
 
-      // URL normal (inclui i.imgur.com, assets do Owlbear, etc.)
       urls.push(t);
       return urls;
     }
 
-    // ───────── Tentar carregar com fallback ─────────
-    const candidates = getCandidateUrls(rawUrl);
-    let currentIdx = 0;
-    let loadedSuccessfully = false;
+    // Carrega uma imagem tentando vários candidatos em sequência
+    function loadWithFallback(imgEl, raw, onDone) {
+      const candidates = getCandidateUrls(raw);
+      let idx = 0;
 
-    if (candidates.length === 0) {
-      showError('Nenhum link foi fornecido.');
-    } else {
-      tryLoad();
+      if (candidates.length === 0) {
+        onDone(false);
+        return;
+      }
+
+      function attempt() {
+        if (idx >= candidates.length) {
+          onDone(false);
+          return;
+        }
+        imgEl.src = candidates[idx];
+      }
+
+      imgEl.onload = () => onDone(true);
+      imgEl.onerror = () => { idx++; attempt(); };
+      attempt();
     }
 
-    function tryLoad() {
-      if (currentIdx >= candidates.length) {
+    // ────────── Lógica de carregamento ──────────
+    const hasNormal = !!rawNormal;
+    const hasUV = !!rawUV;
+    let loadedCount = 0;
+    const totalToLoad = (hasNormal ? 1 : 0) + (hasUV ? 1 : 0);
+
+    if (totalToLoad === 0) {
+      showError('Nenhum link foi fornecido.');
+    } else {
+      if (hasNormal) {
+        loadWithFallback(imgNormal, rawNormal, (ok) => {
+          if (ok) imgNormal.style.display = '';
+          done(ok);
+        });
+      }
+      if (hasUV) {
+        loadWithFallback(imgUV, rawUV, (ok) => {
+          if (ok) imgUV.style.display = '';
+          done(ok);
+        });
+        // Mostra botão UV somente se há imagem UV vinculada
+        uvBtn.style.display = 'flex';
+      } else {
+        // Se não tem UV, e a normal falhar, mostra erro
+      }
+    }
+
+    let anyLoaded = false;
+    function done(ok) {
+      if (ok) anyLoaded = true;
+      loadedCount++;
+      if (loadedCount < totalToLoad) return;
+
+      if (!anyLoaded) {
         showError(
           '❌ Não foi possível carregar a imagem.<br><br>' +
           'Verifique se:<br>' +
           '• O arquivo está compartilhado como <b>"Qualquer pessoa com o link"</b><br>' +
           '• O link está correto<br>' +
-          '• A imagem é um PNG, JPG, GIF ou WEBP'
+          '• A imagem é PNG, JPG, GIF ou WEBP'
         );
         return;
       }
-      img.src = candidates[currentIdx];
-    }
 
-    img.onload = () => {
-      loadedSuccessfully = true;
       loadingEl.style.display = 'none';
-      img.style.display = '';
       zoomDisplay.style.display = '';
       controlsEl.style.display = '';
       hintEl.style.display = '';
       applyTransform();
-    };
-
-    img.onerror = () => {
-      currentIdx++;
-      tryLoad();
-    };
+    }
 
     function showError(html) {
       loadingEl.style.display = 'none';
@@ -249,14 +316,16 @@
       errorEl.style.display = 'block';
     }
 
-    // ───────── Zoom e pan ─────────
+    // ────────── Zoom e Pan ──────────
     let scale = 1, translateX = 0, translateY = 0;
     let isDragging = false;
     let dragStartX = 0, dragStartY = 0, dragStartTX = 0, dragStartTY = 0;
     const MIN_SCALE = 0.1, MAX_SCALE = 20;
 
     function applyTransform() {
-      img.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+      const t = `translate(-50%, -50%) translate(${translateX}px, ${translateY}px) scale(${scale})`;
+      imgNormal.style.transform = t;
+      imgUV.style.transform = t;
       zoomDisplay.textContent = Math.round(scale * 100) + '%';
     }
 
@@ -279,50 +348,44 @@
     }
 
     viewport.addEventListener('wheel', (e) => {
-      if (!loadedSuccessfully) return;
+      if (!anyLoaded) return;
       e.preventDefault();
       const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
       zoomAt(e.clientX, e.clientY, factor);
     }, { passive: false });
 
     viewport.addEventListener('mousedown', (e) => {
-      if (!loadedSuccessfully || e.button !== 0) return;
+      if (!anyLoaded || e.button !== 0) return;
       isDragging = true;
       viewport.classList.add('dragging');
-      dragStartX = e.clientX;
-      dragStartY = e.clientY;
-      dragStartTX = translateX;
-      dragStartTY = translateY;
+      dragStartX = e.clientX; dragStartY = e.clientY;
+      dragStartTX = translateX; dragStartTY = translateY;
     });
-
     window.addEventListener('mousemove', (e) => {
       if (!isDragging) return;
       translateX = dragStartTX + (e.clientX - dragStartX);
       translateY = dragStartTY + (e.clientY - dragStartY);
       applyTransform();
     });
-
     window.addEventListener('mouseup', () => {
       isDragging = false;
       viewport.classList.remove('dragging');
     });
-
     viewport.addEventListener('dblclick', (e) => {
-      if (!loadedSuccessfully) return;
+      if (!anyLoaded) return;
       e.preventDefault();
       resetView();
     });
 
-    // Toque (mobile/tablet)
+    // Toque
     let touchDist = 0, touchScale = 1;
     viewport.addEventListener('touchstart', (e) => {
-      if (!loadedSuccessfully) return;
+      if (!anyLoaded) return;
       if (e.touches.length === 1) {
         isDragging = true;
         dragStartX = e.touches[0].clientX;
         dragStartY = e.touches[0].clientY;
-        dragStartTX = translateX;
-        dragStartTY = translateY;
+        dragStartTX = translateX; dragStartTY = translateY;
       } else if (e.touches.length === 2) {
         isDragging = false;
         const dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -331,9 +394,8 @@
         touchScale = scale;
       }
     }, { passive: true });
-
     viewport.addEventListener('touchmove', (e) => {
-      if (!loadedSuccessfully) return;
+      if (!anyLoaded) return;
       if (e.touches.length === 1 && isDragging) {
         translateX = dragStartTX + (e.touches[0].clientX - dragStartX);
         translateY = dragStartTY + (e.touches[0].clientY - dragStartY);
@@ -346,9 +408,9 @@
         applyTransform();
       }
     }, { passive: true });
-
     viewport.addEventListener('touchend', () => { isDragging = false; });
 
+    // ────────── Botões ──────────
     document.getElementById('zoom-in').onclick = () => {
       const r = viewport.getBoundingClientRect();
       zoomAt(r.left + r.width / 2, r.top + r.height / 2, 1.3);
@@ -361,6 +423,19 @@
     document.getElementById('toggle-bg').onclick = () => {
       viewport.classList.toggle('checkerboard');
     };
+
+    // Botão UV
+    function toggleUV() {
+      document.body.classList.toggle('uv-active');
+    }
+    uvBtn.onclick = toggleUV;
+
+    // Atalho de teclado: U
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'u' || e.key === 'U') toggleUV();
+    });
+
+    applyTransform();
   </script>
 </body>
 </html>

@@ -1,14 +1,14 @@
 {
   "name": "Vinculador de Imagens a Tokens",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "manifest_version": 1,
-  "description": "Vincule imagens a tokens e visualize-as ao clicar.",
+  "description": "Vincule imagens a tokens, visualize e simule luz UV.",
   "action": {
     "title": "🖼️ Gerenciar Imagens",
     "icon": "/icon.svg",
     "popover": "/manage.html",
-    "height": 450,
-    "width": 350
+    "height": 600,
+    "width": 400
   },
   "background_url": "/background.html"
 }

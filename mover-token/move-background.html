@@ -19,7 +19,7 @@
       easeInOutQuad: (t) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
     };
 
-    // ═══════════ ANIMAÇÃO (sem travar, otimista) ═══════════
+    // ═══════════ ANIMAÇÃO ═══════════
     async function animateToken(tokenId, waypoints, duration, easingName) {
       if (!waypoints || waypoints.length === 0) return;
 
@@ -29,7 +29,6 @@
       const startPos = items[0].position;
       const path = [{ x: startPos.x, y: startPos.y }, ...waypoints];
 
-      // Comprimentos dos segmentos
       const segLengths = [];
       let totalLength = 0;
       for (let i = 1; i < path.length; i++) {
@@ -65,7 +64,6 @@
           const eased = easeFn(t);
           const pos = positionAt(eased);
 
-          // Sem await, sem busy flag → chamadas em rajada, mas otimistas
           OBR.scene.items.updateItems([tokenId], (items) => {
             for (const item of items) {
               item.position.x = pos.x;
@@ -76,7 +74,6 @@
           if (t < 1) {
             requestAnimationFrame(frame);
           } else {
-            // Encaixe exato no final
             const end = path[path.length - 1];
             OBR.scene.items.updateItems([tokenId], (items) => {
               for (const item of items) {
@@ -145,9 +142,9 @@
     OBR.onReady(async () => {
       if (!OBR.isAvailable) return;
 
-      // Registra a ferramenta na barra
+      // ── Cria o modo de ferramenta (correto) ──
       try {
-        await OBR.tool.create({
+        await OBR.tool.createMode({
           id: TOOL_ID,
           icons: [{
             icon: '/mover-token/draw-icon.svg',
@@ -155,68 +152,61 @@
             filter: { activeTools: [], permissions: [], roles: ['GM', 'PLAYER'] }
           }],
           shortcut: 'P',
-          defaultMetadata: {}
+          defaultMetadata: {},
+          // ── Eventos de arrasto definidos AQUI dentro ──
+          onToolDragStart: (context, event) => {
+            if (context.activeMode !== TOOL_ID) return;
+            currentPath = [{ x: event.pointerPosition.x, y: event.pointerPosition.y }];
+            isDrawing = true;
+            updatePathVisual(currentPath);
+          },
+          onToolDragMove: (context, event) => {
+            if (context.activeMode !== TOOL_ID || !isDrawing) return;
+            const last = currentPath[currentPath.length - 1];
+            const dx = event.pointerPosition.x - last.x;
+            const dy = event.pointerPosition.y - last.y;
+            if (Math.hypot(dx, dy) > 30) {
+              currentPath.push({ x: event.pointerPosition.x, y: event.pointerPosition.y });
+              updatePathVisual(currentPath);
+            }
+          },
+          onToolDragEnd: async (context, event) => {
+            if (context.activeMode !== TOOL_ID || !isDrawing) return;
+            isDrawing = false;
+
+            currentPath.push({ x: event.pointerPosition.x, y: event.pointerPosition.y });
+
+            if (currentPath.length < 2) {
+              await clearPathVisual();
+              currentPath = [];
+              return;
+            }
+
+            const selection = await OBR.player.getSelection();
+            if (!selection || selection.length !== 1) {
+              alert('Selecione um único token antes de desenhar o caminho!');
+              await clearPathVisual();
+              currentPath = [];
+              return;
+            }
+
+            const tokenId = selection[0];
+            const duration = 3000;
+            const easing = 'easeInOutQuad';
+
+            await animateToken(tokenId, currentPath, duration, easing);
+
+            setTimeout(async () => {
+              await clearPathVisual();
+              currentPath = [];
+            }, 500);
+          }
         });
       } catch (e) {
-        console.error('Erro ao criar tool:', e);
+        console.error('Erro ao criar tool mode:', e);
       }
 
-      // Eventos de desenho
-      OBR.tool.onDragStart((ctx) => {
-        if (ctx.toolId !== TOOL_ID) return;
-        currentPath = [{ x: ctx.pointerPosition.x, y: ctx.pointerPosition.y }];
-        isDrawing = true;
-        updatePathVisual(currentPath);
-      });
-
-      OBR.tool.onDragMove((ctx) => {
-        if (ctx.toolId !== TOOL_ID || !isDrawing) return;
-        const last = currentPath[currentPath.length - 1];
-        const dx = ctx.pointerPosition.x - last.x;
-        const dy = ctx.pointerPosition.y - last.y;
-        // Adiciona ponto a cada ~30 pixels de distância
-        if (Math.hypot(dx, dy) > 30) {
-          currentPath.push({ x: ctx.pointerPosition.x, y: ctx.pointerPosition.y });
-          updatePathVisual(currentPath);
-        }
-      });
-
-      OBR.tool.onDragEnd(async (ctx) => {
-        if (ctx.toolId !== TOOL_ID || !isDrawing) return;
-        isDrawing = false;
-
-        // Adiciona o ponto final
-        currentPath.push({ x: ctx.pointerPosition.x, y: ctx.pointerPosition.y });
-
-        if (currentPath.length < 2) {
-          await clearPathVisual();
-          currentPath = [];
-          return;
-        }
-
-        // Token alvo = item selecionado
-        const selection = await OBR.player.getSelection();
-        if (!selection || selection.length !== 1) {
-          alert('Selecione um único token antes de desenhar o caminho!');
-          await clearPathVisual();
-          currentPath = [];
-          return;
-        }
-
-        const tokenId = selection[0];
-        const duration = 3000; // 3 segundos para percorrer
-        const easing = 'easeInOutQuad';
-
-        await animateToken(tokenId, currentPath, duration, easing);
-
-        // Remove os pontinhos após meio segundo
-        setTimeout(async () => {
-          await clearPathVisual();
-          currentPath = [];
-        }, 500);
-      });
-
-      // Movimento direto (via popover)
+      // ── Movimento direto (via popover) ──
       OBR.broadcast.onMessage(MOVE_CHANNEL, async (event) => {
         const { tokenId, endX, endY, duration, easing } = event.data || {};
         if (!tokenId) return;

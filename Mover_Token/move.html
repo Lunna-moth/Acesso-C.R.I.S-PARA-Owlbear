@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mover Token</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      padding: 14px;
+      background: var(--obr-background, #1e1e2e);
+      color: var(--obr-text, #cdd6f4);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin: 0;
+      font-size: 13px;
+      box-sizing: border-box;
+    }
+    h3 { margin: 0 0 4px 0; font-size: 14px; }
+    .selected-token {
+      background: #313244;
+      padding: 8px 10px;
+      border-radius: 6px;
+      border-left: 3px solid #89b4fa;
+      font-size: 13px;
+    }
+    .selected-token .label {
+      color: #a6adc8;
+      font-size: 11px;
+      display: block;
+    }
+    .selected-token .value {
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .selected-token .pos {
+      font-size: 11px;
+      color: #a6adc8;
+      margin-top: 4px;
+    }
+    .section {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .section-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #6c7086;
+      font-weight: 600;
+    }
+    .radio-group {
+      display: flex;
+      gap: 12px;
+      font-size: 12px;
+    }
+    .radio-group label {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+    .row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .row > label {
+      font-size: 12px;
+      min-width: 14px;
+      text-align: center;
+    }
+    input[type="number"], select {
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid #45475a;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      font-size: 13px;
+      font-family: inherit;
+      box-sizing: border-box;
+      flex: 1;
+      min-width: 0;
+    }
+    input[type="range"] {
+      flex: 1;
+      accent-color: #89b4fa;
+    }
+    button {
+      padding: 9px 14px;
+      background: #89b4fa;
+      color: #1e1e2e;
+      border: none;
+      border-radius: 6px;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 13px;
+      font-family: inherit;
+      transition: 0.15s;
+    }
+    button:hover { background: #74c7ec; }
+    button:active { transform: scale(0.97); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .duration-value {
+      font-family: monospace;
+      font-size: 12px;
+      min-width: 42px;
+      text-align: right;
+      font-weight: 600;
+    }
+    .warning {
+      background: rgba(243, 139, 168, 0.15);
+      border: 1px solid #f38ba8;
+      color: #f38ba8;
+      padding: 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      line-height: 1.5;
+      text-align: center;
+    }
+    .success {
+      background: rgba(166, 227, 161, 0.15);
+      border: 1px solid #a6e3a1;
+      color: #a6e3a1;
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      text-align: center;
+    }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <div id="no-selection" class="warning">
+    ⚠️ Selecione um <b>único token</b> no mapa para começar.
+  </div>
+
+  <div id="panel" class="hidden">
+    <h3>🚶 Mover Token</h3>
+
+    <div class="selected-token">
+      <span class="label">Token selecionado:</span>
+      <span class="value" id="token-name">—</span>
+      <div class="pos" id="token-pos">Posição: —</div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Destino</div>
+      <div class="radio-group">
+        <label><input type="radio" name="dest-mode" value="coords" checked> Coordenadas</label>
+        <label><input type="radio" name="dest-mode" value="token"> Outro token</label>
+      </div>
+
+      <div id="coords-panel" class="row">
+        <label>X</label>
+        <input type="number" id="dest-x" step="10" value="0">
+        <label>Y</label>
+        <input type="number" id="dest-y" step="10" value="0">
+      </div>
+
+      <div id="token-panel" class="row hidden">
+        <select id="target-token">
+          <option value="">-- Escolha um token --</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Duração do movimento</div>
+      <div class="row">
+        <input type="range" id="duration-slider" min="0.5" max="10" step="0.5" value="2">
+        <span class="duration-value" id="duration-value">2.0s</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Estilo da animação</div>
+      <select id="easing">
+        <option value="easeInOutQuad">Suave (padrão)</option>
+        <option value="linear">Linear (velocidade constante)</option>
+        <option value="easeInQuad">Acelerando</option>
+        <option value="easeOutQuad">Desacelerando</option>
+      </select>
+    </div>
+
+    <button id="start-btn">▶ Iniciar Movimento</button>
+    <div id="status-msg" class="success hidden">✅ Movimento iniciado!</div>
+  </div>
+
+  <script type="module">
+    import OBR from 'https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3.1.0/+esm';
+
+    const noSel = document.getElementById('no-selection');
+    const panel = document.getElementById('panel');
+    const tokenName = document.getElementById('token-name');
+    const tokenPos = document.getElementById('token-pos');
+    const destX = document.getElementById('dest-x');
+    const destY = document.getElementById('dest-y');
+    const targetTokenSel = document.getElementById('target-token');
+    const coordsPanel = document.getElementById('coords-panel');
+    const tokenPanel = document.getElementById('token-panel');
+    const durationSlider = document.getElementById('duration-slider');
+    const durationValue = document.getElementById('duration-value');
+    const easingSel = document.getElementById('easing');
+    const startBtn = document.getElementById('start-btn');
+    const statusMsg = document.getElementById('status-msg');
+
+    let currentToken = null;
+
+    async function init() {
+      if (!OBR.isAvailable) return;
+
+      OBR.player.onChange(async (player) => {
+        if (player.selection && player.selection.length === 1) {
+          const items = await OBR.scene.items.getItems([player.selection[0]]);
+          if (items.length > 0) {
+            currentToken = items[0];
+            await showPanel();
+            return;
+          }
+        }
+        currentToken = null;
+        showNoSelection();
+      });
+
+      durationSlider.addEventListener('input', () => {
+        durationValue.textContent = parseFloat(durationSlider.value).toFixed(1) + 's';
+      });
+
+      document.querySelectorAll('input[name="dest-mode"]').forEach(r => {
+        r.addEventListener('change', () => {
+          const mode = document.querySelector('input[name="dest-mode"]:checked').value;
+          coordsPanel.classList.toggle('hidden', mode !== 'coords');
+          tokenPanel.classList.toggle('hidden', mode !== 'token');
+        });
+      });
+
+      startBtn.addEventListener('click', startMovement);
+
+      // Estado inicial
+      const selection = await OBR.player.getSelection();
+      if (selection && selection.length === 1) {
+        const items = await OBR.scene.items.getItems([selection[0]]);
+        if (items.length > 0) {
+          currentToken = items[0];
+          await showPanel();
+        } else {
+          showNoSelection();
+        }
+      } else {
+        showNoSelection();
+      }
+    }
+
+    async function showPanel() {
+      noSel.classList.add('hidden');
+      panel.classList.remove('hidden');
+      tokenName.textContent = currentToken.name || 'Token sem nome';
+      tokenPos.textContent = `Posição: X=${Math.round(currentToken.position.x)}, Y=${Math.round(currentToken.position.y)}`;
+      destX.value = Math.round(currentToken.position.x);
+      destY.value = Math.round(currentToken.position.y);
+      await populateTokenDropdown();
+    }
+
+    function showNoSelection() {
+      noSel.classList.remove('hidden');
+      panel.classList.add('hidden');
+    }
+
+    async function populateTokenDropdown() {
+      const items = await OBR.scene.items.getItems();
+      const tokens = items.filter(i =>
+        i.layer === 'CHARACTER' && i.id !== currentToken.id
+      );
+      targetTokenSel.innerHTML = '<option value="">-- Escolha um token --</option>';
+      for (const t of tokens) {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = `${t.name || 'Token'} (X=${Math.round(t.position.x)}, Y=${Math.round(t.position.y)})`;
+        targetTokenSel.appendChild(opt);
+      }
+    }
+
+    async function startMovement() {
+      if (!currentToken) return;
+
+      const mode = document.querySelector('input[name="dest-mode"]:checked').value;
+      let endX, endY;
+
+      if (mode === 'coords') {
+        endX = parseFloat(destX.value);
+        endY = parseFloat(destY.value);
+        if (isNaN(endX) || isNaN(endY)) {
+          alert('Preencha as coordenadas X e Y!');
+          return;
+        }
+      } else {
+        const targetId = targetTokenSel.value;
+        if (!targetId) {
+          alert('Escolha um token de destino!');
+          return;
+        }
+        const items = await OBR.scene.items.getItems([targetId]);
+        if (items.length === 0) {
+          alert('Token de destino não encontrado.');
+          return;
+        }
+        endX = items[0].position.x;
+        endY = items[0].position.y;
+      }
+
+      const duration = parseFloat(durationSlider.value) * 1000;
+      const easing = easingSel.value;
+
+      await OBR.broadcast.sendMessage(
+        'com.example.move-token/start',
+        { tokenId: currentToken.id, endX, endY, duration, easing },
+        { destination: 'LOCAL' }
+      );
+
+      statusMsg.classList.remove('hidden');
+      setTimeout(() => statusMsg.classList.add('hidden'), 2000);
+    }
+
+    OBR.onReady(init);
+  </script>
+</body>
+</html>

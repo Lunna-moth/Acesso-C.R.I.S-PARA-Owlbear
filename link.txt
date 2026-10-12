@@ -1,1 +1,3 @@
 https://acesso-c-r-i-s-para-owlbear.pages.dev/manifest.json
+
+https://acesso-c-r-i-s-para-owlbear.pages.dev/Mover Token/manifest.json

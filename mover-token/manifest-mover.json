@@ -5,10 +5,10 @@
   "description": "Mova tokens de um ponto a outro com animação suave.",
   "action": {
     "title": "🚶 Mover Token",
-    "icon": "/move-icon.svg",
-    "popover": "/move.html",
+    "icon": "/mover-token/move-icon.svg",
+    "popover": "/mover-token/move.html",
     "height": 520,
     "width": 340
   },
-  "background_url": "/move-background.html"
+  "background_url": "/mover-token/move-background.html"
 }
